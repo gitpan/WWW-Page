@@ -1,0 +1,20 @@
+Example of how to use WWW::Page module for creating XSLT-based web-site.
+
+This example is a demonstration of how to create a blog with tagging, search and month-calendar.
+
+Enroll your http://localhost/ (or whatever) and ensure the following:
+
+1. document root is beeing pointed to example/www;
+2. allow .htaccess for example/www;
+3. point script aliases to example/cgi;
+4. create database 'blog' and update its credentials at example/cgi/Import/Datasource.pm.
+
+Database scheme is in example/data/scheme.sql, sample data are in example/data/example-data.sql.
+
+Use http://localhost/ to view the web-site, and http://localhost/adm/ to add or edit messages.
+
+Future versions of WWW::Page will have more detailed description.
+
+Please write to the author any your thoughts.
+
+Andrew Shitov <andy@shitov.ru>, December 30, 2007.

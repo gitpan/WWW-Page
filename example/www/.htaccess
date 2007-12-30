@@ -1,0 +1,23 @@
+DirectoryIndex main.xml
+AddType text/html;charset=utf-8 .html .xml
+
+AddType image/x-icon .ico
+
+AddHandler www-page .xml
+Action www-page /cgi-bin/www-page.pl
+
+RewriteEngine On
+
+RewriteRule ^main\. - [L]
+
+RewriteRule ^archive/(\d+)/?$ /$1/ [R,L]
+
+RewriteRule ^(css|js|img|page-structure)/ - [L]
+RewriteRule ^favicon\.ico$ - [L]
+
+
+RewriteRule ^rss/?$ /page-structure/rss.xml [L,QSA]
+RewriteRule ^search/?$ /page-structure/search.xml [L,QSA]
+RewriteRule ^incrementalsearch/?$ /cgi-bin/Services/incrementalsearch.pl [L,QSA]
+RewriteRule ^([^/]+)/?$ /page-structure/view.xml [L,QSA]
+RewriteRule ^(\d+)/(\d+)/?$ /page-structure/month.xml [L,QSA]

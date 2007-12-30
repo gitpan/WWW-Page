@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+
+<page
+	import="Import::Admin"
+	transform="admin.xsl"
+	xmlns:page="urn:www-page">
+
+	<manifest>
+		<title>Edit article</title>
+		<page:keyword-list/>
+	</manifest>
+
+	<content>
+		<page:edit-message/>
+	</content>
+</page>

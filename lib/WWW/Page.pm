@@ -1,7 +1,7 @@
 package WWW::Page;
 
 use vars qw ($VERSION);
-$VERSION = '2.0';
+$VERSION = '1.99';
 
 use XML::LibXML;
 use XML::LibXSLT;

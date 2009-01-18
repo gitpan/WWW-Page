@@ -1,7 +1,7 @@
 package WWW::Page;
 
 use vars qw ($VERSION);
-$VERSION = '2.01';
+$VERSION = '1.99';
 
 use XML::LibXML;
 use XML::LibXSLT;
@@ -35,6 +35,10 @@ sub new {
 		xslt_path        => undef,
 	};
 
+	$this->{'header'} = {
+		'Content-Type' => "$this->{'content_type'}; charset=$this->{'charset'}"
+	},
+
 	bless $this, $class;
 
 	return $this;
@@ -44,10 +48,6 @@ sub run {
 	my ($this, %args) = @_;
 
 	$this->{'param'} = _read_params();
-	
-	$this->{'header'} = {
-		'Content-Type' => "$this->{'content_type'}; charset=$this->{'charset'}"
-	};
 
 	for my $key (keys %args) {
 		$this->{$key} = $args{$key};

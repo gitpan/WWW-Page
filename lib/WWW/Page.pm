@@ -1,47 +1,57 @@
 package WWW::Page;
 
 use vars qw ($VERSION);
-$VERSION = '1.0';
+$VERSION = '2.0';
 
 use XML::LibXML;
 use XML::LibXSLT;
+use File::Cache::Persistent;
+use XSLT::Cache;
 
 sub new {
 	my $class = shift;
 	my $args = shift;
 
 	my $this = {
-		charset			=> $args->{'charset'} || 'UTF-8',
-		content_type	=> $args->{'content-type'} || 'text/html',
-		content         => '',
-		source          => $args->{'source'} || $ENV{'PATH_TRANSLATED'},
-		script_filename => $args->{'script-filename'} || $ENV{'SCRIPT_FILENAME'},
-		document_root   => $args->{'document-root'} || $ENV{'DOCUMENT_ROOT'},
-		xslt_root       => $args->{'xslt-root'} || "$ENV{'DOCUMENT_ROOT'}/xsl",
-		request_uri     => $args->{'request-uri'} || $ENV{'REQUEST_URI'},
-		xml             => undef,
-		xsl             => undef,
-		code            => undef,
+		charset	         => $args->{'charset'} || 'UTF-8',
+		content_type     => $args->{'content-type'} || 'text/html',
+		content          => '',
+		source           => $args->{'source'} || $ENV{'PATH_TRANSLATED'},
+		script_filename  => $args->{'script-filename'} || $ENV{'SCRIPT_FILENAME'},
+		lib_root         => $args->{'lib-root'},
+		document_root    => $args->{'document-root'} || $ENV{'DOCUMENT_ROOT'},
+		xslt_root        => $args->{'xslt-root'} || "$ENV{'DOCUMENT_ROOT'}/xsl",
+		request_uri      => $args->{'request-uri'} || $ENV{'REQUEST_URI'},
+
+		xml              => undef,
+		code             => undef,
+		xml_cache        => new File::Cache::Persistent(
+			reader  => \&xml_reader,
+			timeout => $args->{'timeout'} || undef
+		),
+		xsl_cache        => new XSLT::Cache(
+			timeout => $args->{'timeout'} || undef
+		),
+		xslt_path        => undef,
 	};
 
-	$this->{'header'} = {'Content-Type' => "$this->{'content_type'}; charset=$this->{'charset'}"},
+	$this->{'header'} = {
+		'Content-Type' => "$this->{'content_type'}; charset=$this->{'charset'}"
+	},
 
 	bless $this, $class;
-
-	$this->{'param'} = _read_params();
-	$this->parse();
 
 	return $this;
 }
 
-sub as_string {
-    my $this = shift;
-    
-    return $this->header() . $this->content();
-}
+sub run {
+	my ($this, %args) = @_;
 
-sub parse {
-	my $this = shift;
+	$this->{'param'} = _read_params();
+
+	for my $key (keys %args) {
+		$this->{$key} = $args{$key};
+	}
 
 	$this->readSource();
 	$this->appendInfo();
@@ -53,11 +63,51 @@ sub parse {
 	$this->transformXML();
 }
 
+sub as_string {
+	my $this = shift;
+
+	$this->run();
+
+	return $this->response();
+}
+
+sub response {
+	my $this = shift;
+
+	return $this->header() . $this->content();
+}
+
 sub readSource {
 	my $this = shift;
+
+	my $cache = $this->{'xml_cache'}->get($this->{'source'});
+
+	my $cache_dom = $cache->documentElement()->cloneNode(1);
+
+	my $dom = new XML::LibXML::Document();
+	$dom->setDocumentElement($cache_dom);
+	$this->{'xml'} = $dom;
 	
+	my @contentType = $this->{'xml'}->findnodes('/page/@content-type');
+	if (@contentType) {
+		$this->{'header'}->{'Content-Type'} = $contentType[0]->firstChild->data;
+	}
+}
+
+sub xml_reader {
+	my $path = shift;
+
 	my $xmlParser = new XML::LibXML();
-	$this->{'xml'} = $xmlParser->parse_file($this->{'source'});
+
+	return $xmlParser->parse_file($path);
+}
+
+sub xsl_reader {
+	my $path = shift;
+
+	my $xslParser = new XML::LibXSLT();
+
+	return $xslParser->parse_file($path);
 }
 
 sub appendInfo {
@@ -66,39 +116,66 @@ sub appendInfo {
 	my @manifest = $this->{'xml'}->findnodes('/page/manifest');
 	if (@manifest) {
 		my $manifest = $manifest[0];
-		$manifest->appendTextChild('uri', $this->{'request_uri'});
-		$manifest->appendTextChild('year', 1900 + (localtime time)[5]);
+
+		my $request = new XML::LibXML::Element('request');
+		$manifest->appendChild($request);
+		
+		$request->appendTextChild('server', $ENV{SERVER_NAME});
+		my ($uri, $query_string) = split /\?/, $this->{'request_uri'}, 2;		
+		$request->appendTextChild('uri', $uri);
+		$request->appendTextChild('query-string', $query_string);
+
+		my $source = $this->{'source'};
+		$source =~ s{^$ENV{DOCUMENT_ROOT}}{};
+		$request->appendTextChild('source', $source);
+
+		my ($sec, $min, $hour, $mday, $mon, $year, $wday) = localtime (time);
+		my $dateNode = new XML::LibXML::Element('date');
+		$manifest->appendChild($dateNode);
+		$dateNode->setAttribute('year', 1900 + $year);
+		$dateNode->setAttribute('day', $mday);
+		$dateNode->setAttribute('month', $mon + 1);
+		$dateNode->setAttribute('hour', $hour);
+		$dateNode->setAttribute('min', $min);
+		$dateNode->setAttribute('sec', $sec);
+		$dateNode->setAttribute('wday', $wday);
 	}
 }
 
 sub importCode {
 	my $this = shift;
 
-	my ($base) = $this->{'script_filename'} =~ m{^(.*)/[^/]+$};
-    unshift @INC, $base;
+	my $base = $this->{'lib_root'};
+	unless ($base) {
+		$base = $this->{'script_filename'};
+		($base) = $base =~ m{^(.*)/[^/]+$};
+	}
+	unshift @INC, $base;
 
 	my @imports = $this->{'xml'}->findnodes('/page/@import');
 	if (@imports) {
-		my $module = $imports[0]->firstChild->data;      
+		my $module = $imports[0]->firstChild->data;
 		my $pm = $module;
-        $pm =~ s{::}{/}g;
-        $pm .= '.pm';
-        require "$base/$pm";
-        $this->{'code'} = $module->import();
+		$pm =~ s{::}{/}g;
+		$pm .= '.pm';
+		require "$base/$pm";
+		$this->{'code'} = $module->import();
 	}
 }
 
 sub readXSL {
 	my $this = shift;
 
-	return if defined $this->param('viewxml');
+	if (defined $this->param('viewxml')) {
+		$this->{'header'}->{'Content-Type'} = "text/xml; charset=$this->{'charset'}";
+		return;
+	}
 
 	my $base = $this->{'xslt_root'};
 	my @transforms = $this->{xml}->findnodes('/page/@transform');
+
 	if (@transforms) {
-		my $xslFile = $transforms[0]->firstChild->data;
-		my $xslParser = new XML::LibXSLT();
-		$this->{'xsl'} = $xslParser->parse_stylesheet_file("$base/$xslFile");
+		$this->{'xslt_path'} = "$base/" . $transforms[0]->firstChild->data;
 	}
 	else {
 		$this->{'header'}->{'Content-Type'} = 'text/xml';
@@ -107,23 +184,23 @@ sub readXSL {
 
 sub executeCode {
 	my $this = shift;
-    
-    my $context = new XML::LibXML::XPathContext;
-    $context->registerNs('page', 'urn:www-page');
+
+	my $context = new XML::LibXML::XPathContext;
+	$context->registerNs('page', 'urn:www-page');
 
 	my @codeNodes = $context->findnodes('/page//page:*', $this->{'xml'});
 	foreach my $codeNode (@codeNodes) {
 		my $nodeName = $codeNode->nodeName();
-        $nodeName =~ s/^.*://;
-        my $function = $nodeName;
-        $function =~ s/-(\w)?/defined $1 ? uc $1 : '_'/ge;
-        
+		$nodeName =~ s/^.*://;
+		my $function = $nodeName;
+		$function =~ s/-(\w)?/defined $1 ? uc $1 : '_'/ge;
+
 		my @attributes = $codeNode->getAttributes();
-		my %arguments = ();        
+		my %arguments = ();
 		foreach my $attribute (@attributes){
-            $arguments{$attribute->nodeName()} = $attribute->value();
+			$arguments{$attribute->nodeName()} = $attribute->value();
 		}
-        
+
 		my $newNode = new XML::LibXML::Element($nodeName);
 		$newNode = $this->{'code'}->$function($this, $newNode, \%arguments);
 		$codeNode->replaceNode ($newNode);
@@ -133,9 +210,9 @@ sub executeCode {
 sub transformXML {
 	my $this = shift;
 
-	$this->{'content'} = ($this->{'xsl'} && !defined $this->param('viewxml'))
+	$this->{'content'} = ($this->{'xslt_path'} && !defined $this->param('viewxml'))
 		?
-		$this->{'xsl'}->output_string($this->{'xsl'}->transform($this->{'xml'}))
+		$this->{'xsl_cache'}->transform($this->{'xml'}, $this->{'xslt_path'})
 		:
 		$this->{'xml'}->toString();
 }
@@ -161,7 +238,7 @@ sub content {
 sub param {
 	my $this = shift;
 	my $name = shift;
-	
+
 	return $this->{'param'}->{$name};
 }
 
@@ -188,10 +265,10 @@ sub _read_params {
 
 	$params .= '&' . $ENV{QUERY_STRING};
 	foreach (split /&/, $params) {
-	   my ($name, $value) = (m/(.*)=(.*)/);
-	   if ($name =~ /\S/) {
-		   $param{$name} = _urldecode($value);
-	   }
+		my ($name, $value) = (m/(.*)=(.*)/);
+		if ($name =~ /\S/) {
+			$param{$name} = _urldecode($value);
+		}
 	}
 
 	return \%param;
@@ -204,7 +281,7 @@ sub _urldecode {
 
 	$val =~ s/\+/ /g;
 	$val =~ s/%([0-9A-H]{2})/pack('C',hex($1))/ge;
-	
+
 	return $val;
 }
 
@@ -212,92 +289,89 @@ sub _urldecode {
 
 =head1 NAME
 
-WWW::Page - XSLT-based and XML-configured web-site engine.
+WWW::Page - XSLT-based and XML-configured website engine
 
 =head1 SYNOPSIS
 
-Main CGI script
+mod_perl custom handler
 
-    use WWW::Page;
-    use encoding 'utf-8';
+ use WWW::Page;
 
-    my $page = new WWW::Page ({
-        'xslt-root'       => "$ENV{'DOCUMENT_ROOT'}/../data/xsl",
-    });
+ my $page = new WWW::Page({
+     'xslt-root' => "$ENV{DOCUMENT_ROOT}/../data/xsl",
+     'lib-root'  => "$ENV{DOCUMENT_ROOT}/../lib",
+     'timeout'   => 30,
+ });
 
-    print $page->as_string();
+ sub handler {
+    my $r = shift;
 
-XML-configuration of a page
+     $page->run(
+         source      => "$ENV{DOCUMENT_ROOT}/index.xml",
+         request_uri => $ENV{REQUEST_URI}
+     );
+     print $page->response();
 
-    <?xml version="1.0" encoding="UTF-8"?>
-    <page
-        import="Import::Client"
-        transform="view.xsl"
-        xmlns:page="urn:www-page">
-    
-        <manifest>
-            <title>WWW::Page Web-Site</title>
-            <locale>en-gb</locale>
-            <page:keyword-list/>
-        </manifest>
-    
-        <content>
-            <page:month-calendar/>
-        </content>
-    </page>
+     return Apache2::Const::OK;
+ }
+
+XML-based page description
+
+ <?xml version="1.0" encoding="UTF-8"?>
+ <page
+     import="Import::Client"
+     transform="view.xsl"
+     xmlns:page="urn:www-page">
+
+     <manifest>
+         <title>My website</title>
+         <locale>en-gb</locale>
+         <page:keyword-list/>
+     </manifest>
+
+     <content>
+         <page:month-calendar/>
+     </content>
+ </page>
 
 Parts of imported controller script
-    
-    package Import::Client;
-    use utf8;
-    use XML::LibXML;
 
-    sub keywordList
-    {
-        my $this = shift;
-        my $page = shift;
-        my $node = shift;
-        my $args = shift;
-    
-        my $sth = $dbh->prepare ("select keyword, uri from keywords order by keyword");
-        $sth->execute();
-        while (my ($keyword, $uri) = $sth->fetchrow_array())
-        {
-            my $item = $page->{'xml'}->createElement ('item');
-            $item->appendText ($keyword);
-            $item->setAttribute ('uri', $uri);
-            $node->appendChild ($item);
-        }
-    
-        return $node;
-    }
-    
+ package Import::Client;
+ use utf8;
+ use XML::LibXML;
+
+ sub keywordList
+ {
+     my ($this, $page, $node, $args) = @_;
+
+     my $sth = $dbh->prepare("select keyword, uri from keywords order by keyword");
+     $sth->execute();
+     while (my ($keyword, $uri) = $sth->fetchrow_array())
+     {
+         my $item = $page->{'xml'}->createElement ('item');
+         $item->appendText($keyword);
+         $item->setAttribute('uri', $uri);
+         $node->appendChild($item);
+     }
+
+     return $node;
+ }
+
 =head1 ABSTRACT
 
-WWW::Page makes web-site built on XSLT technology easy to start.
+WWW::Page makes website built on XSLT technology easy to start. It provides simple mechanism to describe
+behaviour of pages in XML files, adds external logic and applies XSL transformations. Both XML and XSLT files
+are being transparently caching.
 
 =head1 DESCRIPTION
 
-This distributive contains 'example' folder with a copy of a web-site built on WWW::Page.
+This module provides a framework for organizing XSLT-based websites. It allows to put the process of
+calling user subroutines and applying XSL transformations behind the scene. Wherever possible, XML and XSL
+documents are cached which eliminates the need of useles reloading and re-parsing them.
 
 =head1 EXAMPLE
 
-Example of how to use WWW::Page module for creating XSLT-based web-site.
-
-This example is a demonstration of how to create a blog with tagging, search and month-calendar.
-
-Enroll your http://localhost/ (or whatever) and ensure the following:
-
-1. document root is beeing pointed to example/www;
-2. allow .htaccess for example/www;
-3. point script aliases to example/cgi;
-4. create database 'blog' and update its credentials at example/cgi/Import/Datasource.pm.
-
-Database scheme is in example/data/scheme.sql, sample data are in example/data/example-data.sql.
-
-Use http://localhost/ to view the web-site, and http://localhost/adm/ to add or edit messages.
-
-Future versions of WWW::Page will have more detailed description.
+Directory C<example> in the repository contains an example of sample website running under mod_perl and WWW::Page.
 
 =head2 Known limitations
 

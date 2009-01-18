@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
 
 <xsl:output
@@ -37,14 +37,14 @@
 			<link rel="stylesheet" type="text/css" href="/css/main.css" />
 		</head>
 		<body>
-			<xsl:if test="manifest/uri/text() = '/'">
+			<xsl:if test="manifest/request/uri/text() = '/'">
 				<div id="rss-link">
 					<a href="/rss/">RSS</a>
 				</div>
 			</xsl:if>
 			<div class="top">
 				<xsl:choose>
-					<xsl:when test="manifest/uri/text() = '/'">
+					<xsl:when test="manifest/request/uri/text() = '/'">
 						<xsl:value-of select="manifest/title/text()"/>
 					</xsl:when>
 					<xsl:when test="content/month-view">
@@ -72,10 +72,10 @@
 			<xsl:apply-templates select="/page/content"/>
 
 			<div class="footer">
-				<xsl:if test="/page/manifest/year/text() != 2007">
+				<xsl:if test="/page/manifest/date/@year != 2007">
 					<xsl:text>2007&#8212;</xsl:text>
 				</xsl:if>
-				<xsl:value-of select="/page/manifest/year/text()"/>
+				<xsl:value-of select="/page/manifest/date/@year"/>
 				<br />
 				<xsl:text>Test site</xsl:text>
 			</div>
@@ -88,7 +88,7 @@
 	<div class="content">
 		<xsl:apply-templates/>
 
-		<xsl:if test="/page/manifest/uri/text() != '/'">
+		<xsl:if test="/page/manifest/request/uri/text() != '/'">
 			<div>
 				<xsl:if test="month-view">
 					<xsl:call-template name="month-navigator"/>
@@ -96,7 +96,7 @@
 			</div>
 		</xsl:if>
 
-		<xsl:if test="/page/manifest/uri/text() != '/' and not (starts-with (/page/manifest/uri/text(), '/search/'))">
+		<xsl:if test="/page/manifest/request/uri/text() != '/' and not (starts-with (/page/manifest/request/uri/text(), '/search/'))">
 			<xsl:call-template name="search-form"/>
 		</xsl:if>			
 	</div>

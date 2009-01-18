@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 
 <page
 	import="Import::Client"
@@ -6,12 +6,11 @@
 	xmlns:page="urn:www-page">
 
 	<manifest>
-		<title>Test site</title>
-		<page:keyword-list/>
+		<title>Test site search results</title>
 	</manifest>
 
 	<content>
-		<page:month-view/>
-		<page:month-calendar/>
+		<page:search-keywords/>
+		<page:search-results/>
 	</content>
 </page>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
 
 <xsl:output
@@ -13,7 +13,11 @@
 			<title>
 				<xsl:value-of select="/page/manifest/title/text()"/>
 			</title>
-			<link>http://opera-test.shitov.ru/</link>
+			<link>
+				<xsl:text>http://</xsl:text>
+				<xsl:value-of select="/page/manifest/request/server/text()"/>
+				<xsl:text>/</xsl:text>
+			</link>
 			<description>Test site.</description>
 			<language>en-gb</language>
 			<pubDate>
@@ -40,7 +44,9 @@
 			<xsl:value-of select="title/text()" disable-output-escaping="yes"/>
 		</title>
 		<link>
-			<xsl:text>http://opera-test.shitov.ru.ru/</xsl:text>
+			<xsl:text>http://</xsl:text>
+			<xsl:value-of select="/page/manifest/request/server/text()"/>
+			<xsl:text>/</xsl:text>
 			<xsl:value-of select="@uri"/>
 			<xsl:text>/</xsl:text>
 		</link>

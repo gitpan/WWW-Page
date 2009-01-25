@@ -1,7 +1,7 @@
 package WWW::Page;
 
 use vars qw ($VERSION);
-$VERSION = '2.02';
+$VERSION = '2.2';
 
 use XML::LibXML;
 use XML::LibXSLT;
@@ -178,6 +178,7 @@ sub readXSL {
 		$this->{'xslt_path'} = "$base/" . $transforms[0]->firstChild->data;
 	}
 	else {
+		$this->{'xslt_path'} = undef;
 		$this->{'header'}->{'Content-Type'} = 'text/xml';
 	}
 }
@@ -210,11 +211,23 @@ sub executeCode {
 sub transformXML {
 	my $this = shift;
 
-	$this->{'content'} = ($this->{'xslt_path'} && !defined $this->param('viewxml'))
-		?
-		$this->{'xsl_cache'}->transform($this->{'xml'}, $this->{'xslt_path'})
-		:
-		$this->{'xml'}->toString();
+	if ($this->{'xslt_path'} && !defined $this->param('viewxml')) {
+	    eval {
+        	    $this->{'content'} = $this->{'xsl_cache'}->transform($this->{'xml'}, $this->{'xslt_path'});
+	    };
+	    if ($@) {
+		$this->{'reader_error'} = $this->{'xsl_cache'}->reader_error();
+	    }
+	}
+	else {
+	    $this->{'content'} = $this->{'xml'}->toString();
+	}
+}
+
+sub clearXSLcache {
+    my $this = shift;
+    
+    $this->{'xsl_cache'}->remove($this->{'xslt_path'}) if defined $this->{'xslt_path'};
 }
 
 sub header {
@@ -233,6 +246,12 @@ sub content {
 	my $this = shift;
 
 	return $this->{'content'};
+}
+
+sub error {
+    my $this = shift;
+    
+    return $this->{'reader_error'};
 }
 
 sub param {

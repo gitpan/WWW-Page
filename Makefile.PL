@@ -14,7 +14,7 @@ WriteMakefile(
     'PREREQ_PM' => {
         'XML::LibXML' => 0,
         'XML::LibXSLT' => 0,
-	'File::Cache::Persistent' => 0,
-	'XSLT::Cache' => 0,
+	'File::Cache::Persistent' => 0.3,
+	'XSLT::Cache' => 0.3,
     }
 );
